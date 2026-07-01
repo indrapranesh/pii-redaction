@@ -1,0 +1,89 @@
+#pii-guard-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 10, 20, 0.55);
+  font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+#pii-guard-panel .pg-card {
+  width: min(560px, 92vw);
+  max-height: 82vh;
+  overflow: auto;
+  background: #171e2e;
+  color: #e6ebf5;
+  border: 1px solid #2a3450;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+#pii-guard-panel .pg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+#pii-guard-panel .pg-title { font-size: 16px; font-weight: 700; }
+#pii-guard-panel .pg-count { color: #93a1bd; font-size: 12px; }
+#pii-guard-panel .pg-sub { color: #93a1bd; margin: 6px 0 12px; }
+#pii-guard-panel .pg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+#pii-guard-panel .pg-row:hover { background: #1e2740; }
+#pii-guard-panel .pg-tag {
+  font-size: 11px;
+  font-weight: 700;
+  background: #223052;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+#pii-guard-panel .pg-val {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+#pii-guard-panel .pg-src { font-size: 11px; color: #93a1bd; }
+#pii-guard-panel .pg-src-deterministic { color: #47c98a; }
+#pii-guard-panel .pg-src-dictionary { color: #d9a441; }
+#pii-guard-panel .pg-src-ner { color: #5b8cff; }
+#pii-guard-panel .pg-preview { margin-top: 12px; }
+#pii-guard-panel .pg-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #93a1bd;
+  margin-bottom: 4px;
+}
+#pii-guard-panel .pg-preview pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0c111b;
+  border: 1px solid #2a3450;
+  border-radius: 8px;
+  padding: 10px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+}
+#pii-guard-panel .pg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+#pii-guard-panel button {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#pii-guard-panel .pg-cancel { background: #223052; color: #e6ebf5; }
+#pii-guard-panel .pg-send { background: #5b8cff; color: #fff; }

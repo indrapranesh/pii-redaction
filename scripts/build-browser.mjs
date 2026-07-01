@@ -27,11 +27,26 @@ await build({
   legalComments: 'none',
 });
 
-// Fan the bundle out to the self-contained surfaces.
+// Fan the ESM bundle out to the demo (which loads it as a module).
 for (const dest of ['demo/vendor/pii-core.mjs', 'extension/vendor/pii-core.mjs']) {
   const target = resolve(root, dest);
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(outfile, target);
 }
 
-console.log('Built browser bundle -> browser/pii-core.mjs (+ demo & extension copies)');
+// The extension content script must be a classic IIFE (no ES module / dynamic
+// import) so it runs under strict page CSPs. Bundle the engine into it.
+await build({
+  entryPoints: [resolve(root, 'extension/src/content.js')],
+  bundle: true,
+  format: 'iife',
+  platform: 'browser',
+  target: 'es2022',
+  outfile: resolve(root, 'extension/content.js'),
+  legalComments: 'none',
+});
+
+console.log(
+  'Built browser bundle -> browser/pii-core.mjs (+ demo & extension copies)\n' +
+    'Built extension content script -> extension/content.js',
+);

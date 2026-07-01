@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mock chat (extension test harness)</title>
+    <link rel="stylesheet" href="../panel.css" />
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 20px; }
+      #stream { border: 1px solid #ccc; padding: 10px; min-height: 120px; margin-bottom: 10px; }
+      .msg { margin: 6px 0; padding: 6px 10px; border-radius: 8px; }
+      .user { background: #e8eefc; }
+      .assistant { background: #eef7ee; }
+      textarea { width: 60%; height: 60px; }
+    </style>
+  </head>
+  <body>
+    <h1>Mock chat</h1>
+    <div id="stream" data-pii-stream></div>
+    <textarea data-pii-composer></textarea>
+    <button data-pii-send>Send</button>
+
+    <script>
+      // Minimal stand-in for a chat UI so the real content script can be tested
+      // without a live provider. It appends a user bubble with whatever text is
+      // in the composer at click time, then a canned assistant reply that
+      // references the first placeholder it sees.
+      const stream = document.querySelector('#stream');
+      const composer = document.querySelector('[data-pii-composer]');
+      const sendBtn = document.querySelector('[data-pii-send]');
+
+      function appendMsg(role, text) {
+        const el = document.createElement('div');
+        el.className = `msg ${role}`;
+        if (role === 'assistant') el.setAttribute('data-pii-message', '');
+        el.textContent = text;
+        stream.appendChild(el);
+        return el;
+      }
+
+      sendBtn.addEventListener('click', () => {
+        const text = composer.value;
+        if (!text.trim()) return;
+        appendMsg('user', text);
+        composer.value = '';
+        const m = text.match(/\[\[[A-Z_]+_\d+\]\]/);
+        const reply = m
+          ? `Understood. I'll follow up with ${m[0]} shortly.`
+          : 'Understood.';
+        appendMsg('assistant', reply);
+      });
+    </script>
+    <script src="../content.js"></script>
+  </body>
+</html>

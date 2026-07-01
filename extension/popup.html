@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 14px;
+        font: 13px/1.5 system-ui, sans-serif;
+        background: #171e2e;
+        color: #e6ebf5;
+      }
+      h1 { font-size: 14px; margin: 0 0 4px; }
+      p { color: #93a1bd; margin: 0 0 12px; }
+      label { display: block; margin: 10px 0 4px; font-weight: 600; }
+      textarea, input {
+        width: 100%;
+        box-sizing: border-box;
+        background: #0c111b;
+        color: #e6ebf5;
+        border: 1px solid #2a3450;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font: 12px/1.4 ui-monospace, monospace;
+      }
+      textarea { min-height: 84px; resize: vertical; }
+      button {
+        margin-top: 12px;
+        width: 100%;
+        background: #5b8cff;
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        padding: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .saved { color: #47c98a; font-size: 12px; margin-top: 8px; min-height: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>PII Redaction Guard</h1>
+    <p>Everything is redacted in your browser. These settings tune detection.</p>
+
+    <label for="dict">Custom dictionary (one per line: <code>term, TYPE</code>)</label>
+    <textarea id="dict" placeholder="Acme Corp, ORG&#10;Project Bluebird, MISC"></textarea>
+
+    <label for="conf">NER confidence threshold</label>
+    <input id="conf" type="number" min="0" max="1" step="0.05" value="0.5" />
+
+    <button id="save">Save</button>
+    <div class="saved" id="saved"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

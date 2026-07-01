@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PII Redaction Guard",
+  "version": "0.1.0",
+  "description": "Redacts PII before it leaves your browser for ChatGPT/Claude, then rehydrates the response locally. The real values never leave this machine.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "PII Redaction Guard"
+  }
+}

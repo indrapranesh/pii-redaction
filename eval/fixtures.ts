@@ -56,4 +56,30 @@ export const FIXTURES: EvalExample[] = [
     // should be left alone — this example guards against false positives.
     gold: [],
   },
+  {
+    text: 'ITIN 900-70-1234 on file; MRN: A55231 for the visit.',
+    gold: [
+      { type: 'ITIN', value: '900-70-1234' },
+      { type: 'MRN', value: 'A55231' },
+    ],
+  },
+  {
+    text: "Passport No: X12345678 and driver's license D9988776 attached.",
+    gold: [
+      { type: 'PASSPORT', value: 'X12345678' },
+      { type: 'DRIVERS_LICENSE', value: 'D9988776' },
+    ],
+  },
+  {
+    text: 'IPv6 host 2001:db8::8a2e:370:7334 responded; account no. 100200300400.',
+    gold: [
+      { type: 'IP', value: '2001:db8::8a2e:370:7334' },
+      { type: 'ACCOUNT_NUMBER', value: '100200300400' },
+    ],
+  },
+  {
+    text: 'The hex color #cafe12 and the word decade are not identifiers.',
+    // Guards against IPv6/hex false positives on ordinary hex-looking text.
+    gold: [],
+  },
 ];

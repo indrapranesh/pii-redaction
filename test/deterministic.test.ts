@@ -64,6 +64,41 @@ describe('runRecognizers', () => {
     ]);
   });
 
+  it('detects an ITIN separately from an SSN', () => {
+    expect(pairs('itin 900-70-0000')).toContainEqual(['ITIN', '900-70-0000']);
+    // A 9xx number is not a valid SSN, so it is not double-tagged.
+    expect(pairs('itin 900-70-0000').some(([t]) => t === 'SSN')).toBe(false);
+  });
+
+  it('detects a compressed IPv6 address', () => {
+    expect(pairs('host 2001:db8::8a2e:370:7334 up')).toContainEqual([
+      'IP',
+      '2001:db8::8a2e:370:7334',
+    ]);
+  });
+
+  it('detects keyword-gated identifiers without matching bare tokens', () => {
+    expect(pairs('Passport No: X12345678 issued')).toContainEqual([
+      'PASSPORT',
+      'X12345678',
+    ]);
+    expect(pairs('MRN: A12345 admitted')).toContainEqual(['MRN', 'A12345']);
+    expect(pairs("driver's license D1234567 expires")).toContainEqual([
+      'DRIVERS_LICENSE',
+      'D1234567',
+    ]);
+    expect(pairs('account no. 1234567890 balance')).toContainEqual([
+      'ACCOUNT_NUMBER',
+      '1234567890',
+    ]);
+    // Bare alphanumerics without a keyword must NOT be flagged.
+    expect(
+      pairs('the code X1234567 is fine').some(
+        ([t]) => t === 'PASSPORT' || t === 'DRIVERS_LICENSE',
+      ),
+    ).toBe(false);
+  });
+
   it('records offsets that slice back to the original text', () => {
     const text = 'email jane@example.com now';
     const e = runRecognizers(text).find((x) => x.type === 'EMAIL')!;

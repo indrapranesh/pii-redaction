@@ -4,6 +4,8 @@ import {
   isPlausibleEmailDomain,
   isValidIBAN,
   isValidIPv4,
+  isValidIPv6,
+  isValidITIN,
   isValidRoutingNumber,
   isValidSSN,
 } from '../src/deterministic/validators.js';
@@ -34,6 +36,33 @@ describe('isValidSSN', () => {
     expect(isValidSSN('900-45-6789')).toBe(false); // area 900+
     expect(isValidSSN('123-00-6789')).toBe(false); // group 00
     expect(isValidSSN('123-45-0000')).toBe(false); // serial 0000
+  });
+});
+
+describe('isValidITIN', () => {
+  it('accepts a 9xx number with an IRS-valid group', () => {
+    expect(isValidITIN('900-70-0000')).toBe(true); // group 70 in 70-88
+    expect(isValidITIN('999-88-1234')).toBe(true);
+  });
+  it('rejects non-9 leading digit and out-of-range groups', () => {
+    expect(isValidITIN('123-70-0000')).toBe(false); // not a 9
+    expect(isValidITIN('900-69-0000')).toBe(false); // group 69 excluded
+    expect(isValidITIN('900-93-0000')).toBe(false); // group 93 excluded
+  });
+});
+
+describe('isValidIPv6', () => {
+  it('accepts full and compressed forms', () => {
+    expect(isValidIPv6('2001:0db8:85a3:0000:0000:8a2e:0370:7334')).toBe(true);
+    expect(isValidIPv6('2001:db8::8a2e:370:7334')).toBe(true);
+    expect(isValidIPv6('::1')).toBe(true);
+    expect(isValidIPv6('::ffff:192.168.0.1')).toBe(true); // IPv4 tail
+  });
+  it('rejects malformed addresses', () => {
+    expect(isValidIPv6('2001:db8:::1')).toBe(false); // triple colon
+    expect(isValidIPv6('12345::1')).toBe(false); // hextet too long
+    expect(isValidIPv6('192.168.0.1')).toBe(false); // pure IPv4
+    expect(isValidIPv6('2001:db8:85a3:0:0:8a2e:370')).toBe(false); // too few, no ::
   });
 });
 

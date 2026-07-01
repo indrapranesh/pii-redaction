@@ -15,6 +15,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { redact } from '../src/engine.js';
+import { createTransformersNer } from '../src/ner/transformers.js';
 import type { NerProvider, PIIEntity, PIIType } from '../src/types.js';
 import { FIXTURES, type EvalExample } from './fixtures.js';
 
@@ -124,10 +125,22 @@ function report(counts: Map<PIIType, Counts>): void {
 }
 
 async function main(): Promise<void> {
-  const datasetPath = process.argv[2];
+  const args = process.argv.slice(2);
+  // Optional `--ner` or `--ner=<model-id>` to also score PERSON/ORG/LOCATION
+  // with a real Transformers.js model (downloads weights on first run).
+  const nerArg = args.find((a) => a === '--ner' || a.startsWith('--ner='));
+  const datasetPath = args.find((a) => !a.startsWith('--'));
+
   const examples: EvalExample[] = datasetPath
     ? (JSON.parse(readFileSync(datasetPath, 'utf8')) as EvalExample[])
     : FIXTURES;
+
+  let ner: NerProvider | undefined;
+  if (nerArg) {
+    const model = nerArg.includes('=') ? nerArg.split('=')[1] : undefined;
+    ner = createTransformersNer(model ? { model } : {});
+    console.log(`NER layer enabled${model ? ` (model: ${model})` : ''}.`);
+  }
 
   console.log(
     `Evaluating on ${examples.length} example(s)${
@@ -137,8 +150,7 @@ async function main(): Promise<void> {
 
   const counts = new Map<PIIType, Counts>();
   for (const example of examples) {
-    // NER is deterministic-only here; inject a provider to score names/orgs too.
-    await scoreExample(example, counts);
+    await scoreExample(example, counts, ner);
   }
   report(counts);
 }

@@ -15,6 +15,7 @@
  */
 export type PIIType =
   | 'SSN'
+  | 'ITIN'
   | 'CREDIT_CARD'
   | 'EMAIL'
   | 'PHONE'
@@ -22,6 +23,9 @@ export type PIIType =
   | 'IBAN'
   | 'ROUTING_NUMBER'
   | 'ACCOUNT_NUMBER'
+  | 'PASSPORT'
+  | 'DRIVERS_LICENSE'
+  | 'MRN'
   | 'DATE_OF_BIRTH'
   | 'PERSON'
   | 'ORG'

@@ -4,6 +4,8 @@ import {
   isPlausibleEmailDomain,
   isValidIBAN,
   isValidIPv4,
+  isValidIPv6,
+  isValidITIN,
   isValidRoutingNumber,
   isValidSSN,
 } from './validators.js';
@@ -44,6 +46,13 @@ export const RECOGNIZERS: Recognizer[] = [
     priority: 80,
   },
   {
+    // ITIN — SSN-shaped but starts with 9; guarded by IRS group ranges.
+    type: 'ITIN',
+    pattern: /\b9\d{2}[-\s]?\d{2}[-\s]?\d{4}\b/g,
+    validate: isValidITIN,
+    priority: 82,
+  },
+  {
     // Credit card — 13-19 digits, optionally grouped by spaces/hyphens.
     type: 'CREDIT_CARD',
     pattern: /\b(?:\d[ -]?){12,18}\d\b/g,
@@ -65,9 +74,12 @@ export const RECOGNIZERS: Recognizer[] = [
     priority: 60,
   },
   {
-    // IPv6 — 8 hextets (does not attempt to cover every :: compression form).
+    // IPv6 — any colon-bearing token, validated (handles `::` compression and
+    // an optional embedded IPv4 tail). Candidate must contain at least 2 colons.
     type: 'IP',
-    pattern: /\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b/gi,
+    pattern:
+      /(?<![0-9a-fA-F:.])(?=[0-9a-fA-F.]*:[0-9a-fA-F.]*:)[0-9a-fA-F:.]{2,45}(?![0-9a-fA-F:.])/g,
+    validate: isValidIPv6,
     priority: 60,
   },
   {
@@ -75,7 +87,7 @@ export const RECOGNIZERS: Recognizer[] = [
     // to avoid swallowing bare 10-digit account numbers.
     type: 'PHONE',
     pattern:
-      /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}\b/g,
+      /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}\b|\+\d{1,3}[\s.-]?\d{2,4}(?:[\s.-]?\d{2,4}){2,4}\b/g,
     priority: 50,
   },
   {
@@ -84,6 +96,36 @@ export const RECOGNIZERS: Recognizer[] = [
     pattern: /\b\d{9}\b/g,
     validate: isValidRoutingNumber,
     priority: 40,
+  },
+  {
+    // US passport — keyword-gated to avoid matching arbitrary alphanumerics.
+    // Book numbers are 9 digits (older) or 1 letter + 8 digits (newer).
+    type: 'PASSPORT',
+    pattern:
+      /(?<=\bpassport(?:\s*(?:no|number|#))?\b[:.#\s]{0,3})[A-Z]?\d{8,9}\b/gi,
+    priority: 58,
+  },
+  {
+    // Driver's license — formats vary wildly by state, so keyword-gate and
+    // capture the following alphanumeric token.
+    type: 'DRIVERS_LICENSE',
+    pattern:
+      /(?<=\b(?:driver'?s?\s+licen[sc]e|dl(?:\s*(?:no|number|#))?)\b[:.#\s]{0,3})[A-Z0-9]{5,20}\b/gi,
+    priority: 57,
+  },
+  {
+    // Medical record number — keyword-gated.
+    type: 'MRN',
+    pattern:
+      /(?<=\b(?:mrn|medical\s+record(?:\s+(?:no|number|#))?)\b[:.#\s]{0,3})[A-Z0-9-]{4,20}\b/gi,
+    priority: 56,
+  },
+  {
+    // Generic bank/customer account number — keyword-gated, 6-17 digits.
+    type: 'ACCOUNT_NUMBER',
+    pattern:
+      /(?<=\b(?:acct|account|a\/c)(?:\s*(?:no|number|#))?\b[:.#\s]{0,3})\d[\d\s-]{5,20}\d\b/gi,
+    priority: 30,
   },
   {
     // Date of birth — only when a DOB keyword precedes the date. The lookbehind

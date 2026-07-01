@@ -46,6 +46,22 @@ export function isValidSSN(value: string): boolean {
   return true;
 }
 
+/**
+ * US ITIN — an SSN-shaped tax id that always starts with 9 and whose group
+ * (4th-5th digits) falls in the IRS-assigned ranges 50-65, 70-88, 90-92, 94-99.
+ */
+export function isValidITIN(value: string): boolean {
+  const digits = digitsOnly(value);
+  if (!/^9\d{8}$/.test(digits)) return false;
+  const group = Number(digits.slice(3, 5));
+  return (
+    (group >= 50 && group <= 65) ||
+    (group >= 70 && group <= 88) ||
+    (group >= 90 && group <= 92) ||
+    (group >= 94 && group <= 99)
+  );
+}
+
 /** Every octet of a dotted-quad must be 0-255 with no leading zeros. */
 export function isValidIPv4(value: string): boolean {
   const parts = value.split('.');
@@ -55,6 +71,40 @@ export function isValidIPv4(value: string): boolean {
     if (p.length > 1 && p[0] === '0') return false; // no leading zeros
     return Number(p) <= 255;
   });
+}
+
+/**
+ * IPv6 validity including `::` zero-compression (at most one `::`) and an
+ * optional trailing IPv4 tail (e.g. `::ffff:192.168.0.1`). Rejects strings that
+ * have too many groups or a malformed hextet.
+ */
+export function isValidIPv6(value: string): boolean {
+  const v = value.trim();
+  if (!/^[0-9a-f:.]+$/i.test(v)) return false;
+  if (/:{3,}/.test(v)) return false; // ':::' or more is never valid
+  const doubleColons = v.match(/::/g);
+  if (doubleColons && doubleColons.length > 1) return false;
+  const hasCompression = v.includes('::');
+
+  // Split off an optional IPv4 tail, which counts as two hextets.
+  let head = v;
+  let tailGroups = 0;
+  const lastColon = v.lastIndexOf(':');
+  const tail = v.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    if (!isValidIPv4(tail)) return false;
+    head = v.slice(0, lastColon + 1); // keep the trailing colon for splitting
+    tailGroups = 2;
+  }
+
+  const parts = head.split(':');
+  // Remove empty parts produced by leading/trailing/`::` colons.
+  const hextets = parts.filter((p) => p !== '');
+  for (const h of hextets) {
+    if (!/^[0-9a-f]{1,4}$/i.test(h)) return false;
+  }
+  const total = hextets.length + tailGroups;
+  return hasCompression ? total <= 7 : total === 8;
 }
 
 /**

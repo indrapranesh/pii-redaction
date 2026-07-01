@@ -36,6 +36,16 @@ export {
 } from './deterministic/index.js';
 export type { Recognizer } from './deterministic/index.js';
 export { chunkText } from './ner/chunk.js';
+export {
+  TransformersNerProvider,
+  createTransformersNer,
+} from './ner/transformers.js';
+export type {
+  TransformersNerOptions,
+  TokenClassificationResult,
+  TokenClassificationPipeline,
+  PipelineFactory,
+} from './ner/transformers.js';
 
 export type {
   PIIType,

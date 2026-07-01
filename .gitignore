@@ -1,6 +1,8 @@
 node_modules/
 dist/
+browser/
 *.log
 .DS_Store
 coverage/
 .vitest/
+.smoke.mjs

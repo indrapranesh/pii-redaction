@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PII Redaction — client-side round-trip demo</title>
+    <style>
+      :root {
+        --bg: #0f1420;
+        --panel: #171e2e;
+        --border: #2a3450;
+        --text: #e6ebf5;
+        --muted: #93a1bd;
+        --accent: #5b8cff;
+        --danger: #ff6b6b;
+        --ok: #47c98a;
+        --tag: #223052;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 24px 28px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      h1 { margin: 0 0 4px; font-size: 20px; }
+      header p { margin: 0; color: var(--muted); }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        padding: 20px 28px 40px;
+        max-width: 1200px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .panel h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        resize: vertical;
+        background: #0c111b;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+      button {
+        background: var(--accent);
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary { background: var(--tag); color: var(--text); }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      label.toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+      pre.out {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #0c111b;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-height: 60px;
+        font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+        margin: 0;
+      }
+      .ph { color: var(--accent); font-weight: 700; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+      th { color: var(--muted); font-weight: 600; }
+      .tag {
+        display: inline-block; padding: 1px 7px; border-radius: 999px;
+        background: var(--tag); color: var(--text); font-size: 11px; font-weight: 600;
+      }
+      .src-deterministic { color: var(--ok); }
+      .src-ner { color: var(--accent); }
+      .src-dictionary { color: #d9a441; }
+      .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+      .vault-warn { color: var(--danger); font-weight: 600; }
+      progress { width: 220px; height: 12px; }
+      .hidden { display: none; }
+      code { background: #0c111b; padding: 1px 5px; border-radius: 4px; }
+      .full { grid-column: 1 / -1; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>PII Redaction — client-side round-trip demo</h1>
+      <p>
+        Everything runs in your browser. The
+        <strong>vault</strong> (placeholder → real value) never leaves this page —
+        only the redacted text would be sent to a cloud LLM.
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>1 · Your text</h2>
+        <textarea id="input">
+Hi, this is Jane Doe from Acme Corp. My email is jane.doe@example.com and my
+cell is (415) 555-0132. Please charge card 4111 1111 1111 1111. My SSN is
+123-45-6789 and the server at 192.168.10.5 keeps timing out. Wire the refund to
+GB82WEST12345698765432. Patient MRN: A55231, DOB: 05/14/1990.</textarea>
+        <div class="row">
+          <button id="redactBtn">Redact →</button>
+          <label class="toggle">
+            <input type="checkbox" id="nerToggle" />
+            Use NER model (names/orgs/locations, ~30–65 MB first load)
+          </label>
+        </div>
+        <div class="row" id="progressRow" style="display:none">
+          <span class="note" id="progressLabel">Loading model…</span>
+          <progress id="progress" max="1" value="0"></progress>
+        </div>
+        <p class="note">
+          Dictionary terms are pre-seeded: <code>Acme Corp</code> (ORG),
+          <code>Project Bluebird</code> (MISC).
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>2 · Redacted text <span class="note">(safe to send)</span></h2>
+        <pre class="out" id="redactedOut">Click “Redact” to see output.</pre>
+        <p class="note" id="latency"></p>
+      </section>
+
+      <section class="panel">
+        <h2>3 · Review before send</h2>
+        <div id="reviewWrap">
+          <p class="note">Detected entities appear here.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>4 · Round-trip &amp; rehydrate</h2>
+        <p class="note">
+          Paste a mock LLM response that references the placeholders above, then
+          rehydrate locally using the vault.
+        </p>
+        <textarea id="responseIn" style="min-height:90px"></textarea>
+        <div class="row">
+          <button id="rehydrateBtn" class="secondary">Rehydrate ←</button>
+        </div>
+        <h2 style="margin-top:14px">Final answer (real values restored)</h2>
+        <pre class="out" id="rehydratedOut"></pre>
+      </section>
+
+      <section class="panel full">
+        <h2>Vault <span class="vault-warn">— stays in memory, never serialized to the network</span></h2>
+        <table id="vaultTable">
+          <thead><tr><th>Placeholder</th><th>Original value</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>

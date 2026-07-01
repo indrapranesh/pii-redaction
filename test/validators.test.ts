@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   isLuhnValid,
   isPlausibleEmailDomain,
+  isValidDEA,
   isValidIBAN,
   isValidIPv4,
   isValidIPv6,
   isValidITIN,
+  isValidMBI,
+  isValidNPI,
   isValidRoutingNumber,
   isValidSSN,
+  isValidVIN,
 } from '../src/deterministic/validators.js';
 
 describe('isLuhnValid', () => {
@@ -94,6 +98,51 @@ describe('isValidIBAN', () => {
   });
   it('rejects mod-97 failures', () => {
     expect(isValidIBAN('DE89 3704 0044 0532 0130 01')).toBe(false);
+  });
+});
+
+describe('isValidNPI', () => {
+  it('accepts a checksum-valid NPI', () => {
+    expect(isValidNPI('1234567893')).toBe(true); // canonical CMS test NPI
+    expect(isValidNPI('1245319599')).toBe(true);
+  });
+  it('rejects checksum failures and wrong length', () => {
+    expect(isValidNPI('1234567890')).toBe(false); // bad check digit
+    expect(isValidNPI('123456789')).toBe(false); // 9 digits
+  });
+});
+
+describe('isValidDEA', () => {
+  it('accepts a checksum-valid DEA number', () => {
+    expect(isValidDEA('AZ1234563')).toBe(true);
+    expect(isValidDEA('BW1000001')).toBe(true);
+  });
+  it('rejects bad checksum and invalid registrant type', () => {
+    expect(isValidDEA('AZ1234561')).toBe(false); // bad check digit
+    expect(isValidDEA('CZ1234563')).toBe(false); // C is not a valid type letter
+  });
+});
+
+describe('isValidMBI', () => {
+  it('accepts a well-formed MBI (hyphenated or bare)', () => {
+    expect(isValidMBI('1EG4-TE5-MK73')).toBe(true);
+    expect(isValidMBI('1EG4TE5MK73')).toBe(true);
+  });
+  it('rejects look-alike letters and bad positions', () => {
+    expect(isValidMBI('1SG4TE5MK73')).toBe(false); // S not allowed
+    expect(isValidMBI('0EG4TE5MK73')).toBe(false); // pos1 must be 1-9
+    expect(isValidMBI('1EG4TE5MK7')).toBe(false); // too short
+  });
+});
+
+describe('isValidVIN', () => {
+  it('accepts a VIN with a valid check digit', () => {
+    expect(isValidVIN('1HGCM82633A004352')).toBe(true);
+    expect(isValidVIN('11111111111111111')).toBe(true); // all-ones canonical VIN
+  });
+  it('rejects a bad check digit and forbidden letters', () => {
+    expect(isValidVIN('1HGCM82634A004352')).toBe(false); // check digit wrong
+    expect(isValidVIN('1HGCM8263IA004352')).toBe(false); // contains I
   });
 });
 

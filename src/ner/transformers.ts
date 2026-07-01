@@ -125,15 +125,32 @@ export class TransformersNerProvider implements NerProvider {
         // Merge sub-word tokens into whole-entity spans.
         aggregation_strategy: 'simple',
       });
+      // Some Transformers.js versions omit char offsets on aggregated results
+      // (they return only `word` + `score`). Track a cursor so we can recover
+      // offsets by locating each entity's text in order, tolerating repeats.
+      let cursor = 0;
       for (const r of results) {
         const type = mapLabel(r.entity_group ?? r.entity);
         if (type === null) continue;
-        if (r.start == null || r.end == null || r.end <= r.start) continue;
+
+        let start = r.start;
+        let end = r.end;
+        if (start == null || end == null || end <= start) {
+          // Fall back to locating the returned word within the chunk.
+          const word = (r.word ?? '').replace(/^\s+/, '');
+          if (!word) continue;
+          const found = chunk.text.indexOf(word, cursor);
+          if (found < 0) continue;
+          start = found;
+          end = found + word.length;
+        }
+        cursor = end;
+
         entities.push({
           type,
-          start: chunk.offset + r.start,
-          end: chunk.offset + r.end,
-          text: text.slice(chunk.offset + r.start, chunk.offset + r.end),
+          start: chunk.offset + start,
+          end: chunk.offset + end,
+          text: text.slice(chunk.offset + start, chunk.offset + end),
           source: 'ner',
           confidence: r.score,
         });

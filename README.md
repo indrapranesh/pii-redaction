@@ -1,77 +1,98 @@
 # @pii-redaction/core
 
-Framework-agnostic, **client-side** PII redaction engine. It detects PII in
-text, swaps it for stable placeholders, and keeps the placeholder→value mapping
-(the **vault**) in memory so it never leaves the browser. Only the redacted text
-is sent to a cloud LLM; the model's response is **rehydrated** locally.
+A PII and PHI redaction engine that runs where your text is, not on someone
+else's server. You hand it a string, it finds the sensitive spans, replaces them
+with stable placeholders, and hands back the redacted text plus a mapping from
+placeholder to original value. That mapping — the *vault* — stays in memory on
+the client. You send only the redacted text to a cloud LLM, and when the reply
+comes back you swap the real values in locally.
 
 ```
-User text  →  REDACT (in browser)  →  "[[PERSON_1]] can't access [[ACCOUNT_1]]"
-                                            ↓  send only redacted text
-                                       Cloud LLM (GPT / Claude)
-                                            ↓  response references [[PERSON_1]]
-           ←  REHYDRATE (in browser) ←  swap placeholders back to real values
+Your text  →  redact()  →  "[[PERSON_1]] can't access [[ACCOUNT_1]]"
+                                  │  only the redacted text leaves the machine
+                                  ▼
+                            Cloud LLM (GPT / Claude / ...)
+                                  │  reply still refers to [[PERSON_1]]
+                                  ▼
+Your text  ←  rehydrate()  ←  placeholders swapped back to real values
 ```
 
-The only component that ever touches raw PII is this in-browser engine.
+Nothing else in the pipeline ever sees the raw values. That's the whole point:
+the compliance boundary is a function call, not a network hop.
 
-## Why this design
+The engine has no runtime dependencies. The optional NER layer (for names and
+other fuzzy entities) is the only thing that pulls in a model runtime, and it's
+lazy-loaded, so if you never call it you never pay for it.
 
-- **Deterministic layer under the ML layer.** The PII that causes real
-  compliance damage — SSNs, cards, emails, phones, account IDs — is *structured*.
-  It's caught with regex + checksums at near-100% recall, deterministically, with
-  zero model dependency. The NER layer only handles fuzzy, contextual entities
-  (names, orgs, locations). Reliability is highest exactly where stakes are.
-  This mirrors [Microsoft Presidio](https://github.com/microsoft/presidio); the
-  novelty is doing it client-side.
-- **Dedicated NER, not a generative LLM.** Entity detection wants a
-  token-classification encoder (BERT/DistilBERT), not a generative model:
-  smaller (~30–65 MB quantized), faster (tens of ms), and more reliable at span
-  extraction.
-- **A round-trip, not a scrubber.** Stable placeholders preserve coreference so
-  the LLM can still reason about "the same person," and the vault stays local.
+## The idea behind the design
+
+Most of the PII that actually gets people fined is *structured*. Social security
+numbers, credit cards, IBANs, routing numbers, national provider identifiers —
+these have formats, and most of them have checksums. You don't need a model to
+find them, and you shouldn't use one: a regex plus a checksum catches them at
+close to 100% recall, deterministically, and rejects look-alikes for free. A
+number that passes the Luhn check is a card; one that doesn't isn't, and no
+amount of model confidence changes that.
+
+So the engine is built in two tiers. The bottom tier is deterministic and
+handles everything with a structure to it. The top tier is a named-entity model
+that handles the genuinely fuzzy things — people, organizations, places — where
+there's no format to match on. The reliability is highest exactly where the
+stakes are highest, and the expensive, less-predictable component only runs on
+the part of the problem that actually needs it.
+
+This split is the same one [Microsoft Presidio](https://github.com/microsoft/presidio)
+makes on the server. The difference here is that the whole thing is small enough
+and dependency-free enough to run in a browser tab, so the raw data never has to
+leave the client to be redacted.
+
+One more deliberate choice: this is a round-trip, not a scrubber. Because every
+occurrence of a value maps to the *same* placeholder, the model can still reason
+about "the same person" across a document. When the answer comes back you undo
+the substitution and the user never sees the placeholders at all.
 
 ## Install
 
 ```bash
 npm install @pii-redaction/core
-# optional: the contextual NER layer
+
+# only if you want the contextual NER layer:
 npm install @huggingface/transformers
 ```
 
-## Usage
+## Quick start
 
-### Deterministic-only (zero dependencies, microsecond latency)
+Deterministic only — no dependencies, runs in microseconds:
 
 ```ts
 import { redact, rehydrate } from '@pii-redaction/core';
 
-const { redactedText, vault, entities } = await redact(
+const { redactedText, vault } = await redact(
   'Email jane@example.com about card 4111 1111 1111 1111.',
 );
-// redactedText: "Email [[EMAIL_1]] about card [[CREDIT_CARD_1]]."
+// redactedText → "Email [[EMAIL_1]] about card [[CREDIT_CARD_1]]."
 
-// ...send redactedText to your LLM, receive `response`...
+// send redactedText to your LLM, get `response` back, then:
 const answer = rehydrate(response, vault); // real values restored, locally
 ```
 
-### With the contextual NER layer (names / orgs / locations)
+With the NER layer for names, organizations, and locations:
 
 ```ts
 import { redact } from '@pii-redaction/core';
 import { createTransformersNer } from '@pii-redaction/core/ner/transformers';
 
 const ner = createTransformersNer({
-  model: 'Xenova/bert-base-NER', // swap to a fine-tuned DistilBERT for production
+  model: 'Xenova/bert-base-NER', // a fine-tuned model does much better — see below
   quantized: true,               // ~30–65 MB int8 weights
-  // device: 'webgpu',           // auto-detected; falls back to WASM
+  // device: 'webgpu',           // auto-detected, falls back to WASM
 });
 
-const { redactedText, vault } = await redact(myText, {
+const { redactedText, vault } = await redact(text, {
   ner,
   policy: {
-    minConfidence: 0.5,          // bias toward recall: when in doubt, redact
-    dictionary: [                // close NER gaps with known terms
+    minConfidence: 0.5,          // below this, drop the NER hit
+    dictionary: [                // things the model won't know are sensitive
       { term: 'Project Bluebird', type: 'MISC' },
       { term: 'Acme Corp', type: 'ORG' },
     ],
@@ -79,86 +100,190 @@ const { redactedText, vault } = await redact(myText, {
 });
 ```
 
-The heavy model dependency is **loaded lazily** on first `detect()`, and the
-`NerProvider` interface is pluggable — inject any implementation (or a stub for
-tests) so the core never hard-depends on a model runtime.
+## How it works
 
-## Architecture
+`redact()` runs three stages and then assigns placeholders.
 
-Three layers, orchestrated by `redact()`:
+**1. Deterministic detectors** (`src/deterministic/`). Each detector is a regex
+that finds candidates plus an optional validator that throws out the false
+positives. The validators are where the precision comes from:
 
-1. **Deterministic detectors** (`src/deterministic/`) — regex recognizers, each
-   with an optional validator that kills false positives:
+| Type | What guards it |
+|---|---|
+| SSN / ITIN | area/group/serial rules; separators must be consistent (so ZIP+4 isn't an SSN) |
+| Credit card | Luhn (mod-10) checksum |
+| IBAN | ISO 7064 mod-97 checksum |
+| Routing number | ABA 3-7-1 weighted checksum |
+| NPI | 10-digit Luhn over the `80840`-prefixed value |
+| DEA | registrant-type letter + the DEA check digit |
+| MBI (Medicare) | 11-position format rules over the non-ambiguous alphabet |
+| VIN | ISO-3779 mod-11 check digit |
+| Email / URL | domain and TLD sanity |
+| Phone / Fax | require separators or a country code |
+| IPv4 / IPv6 | octet ranges, `::` compression, embedded-IPv4 tails |
+| Passport / license / MRN / account / health-plan ID | keyword-gated near a matching label |
+| Date of birth / clinical date | only next to a DOB or admission/discharge keyword |
 
-   | Type | Guard |
-   |---|---|
-   | SSN | invalid area (000 / 666 / 900+), group, serial |
-   | Credit card | **Luhn** mod-10 checksum |
-   | Email | domain / TLD sanity |
-   | Phone | requires separators / country code |
-   | IPv4 / IPv6 | octet range, no leading zeros |
-   | IBAN | ISO 7064 **mod-97** checksum |
-   | Routing number | ABA 3-7-1 checksum |
-   | Date of birth | only with a DOB keyword |
+On top of the built-ins there's a user dictionary for the things no detector or
+model could know about — client names, internal codenames, project IDs.
 
-   Plus a user/org **dictionary** for client names and codenames.
+**2. Contextual NER** (`src/ner/`). A token-classification model (via
+Transformers.js and ONNX Runtime) tags people, organizations, and locations.
+Long inputs are cut into overlapping windows so an entity sitting on a chunk
+boundary doesn't get sliced in half; the duplicate hits from the overlap are
+dropped during reconciliation. The model runs behind the `NerProvider`
+interface, so the core never imports it directly — you inject a provider, or a
+stub in tests.
 
-2. **Contextual NER** (`src/ner/`) — Transformers.js + ONNX Runtime Web
-   token-classification. Long inputs are split with a **sliding window +
-   overlap** so entities straddling a boundary aren't sliced; overlap duplicates
-   are removed in reconciliation.
+**3. Reconciliation** (`src/reconcile.ts`). The two tiers produce overlapping
+spans, and reconciliation resolves them by precedence: dictionary beats
+deterministic beats NER. A string that is both "an org name" and a valid IBAN is
+the IBAN. Among deterministic detectors, the checksum-verified type wins.
 
-3. **Reconciliation** (`src/reconcile.ts`) — merges spans and resolves overlaps
-   by precedence: **dictionary > deterministic > NER** (a string that's both an
-   "org name" and a valid IBAN is the IBAN), with checksum-verified types
-   winning ties among deterministic detectors.
+After that, `src/placeholders.ts` walks the surviving spans and assigns tokens.
+The same value always gets the same `[[TYPE_N]]`, numbered per type in the order
+they appear, and the vault (placeholder → value) is built alongside.
 
-Then stable placeholders are assigned (`src/placeholders.ts`): the same value
-maps to the same `[[TYPE_N]]` token throughout, and the vault is built.
+### Placeholders and rehydration
 
-### Placeholders & rehydration
+Placeholders look like `[[PERSON_1]]`. The double brackets are chosen because
+they read cleanly, almost never collide with real text, and survive tokenization
+through an LLM round-trip better than more exotic delimiters. Rehydration only
+swaps back keys that are actually in the vault, so if the model mangles a token
+or invents one, it's left alone rather than turned into the wrong value.
 
-Tokens use the `[[TYPE_N]]` bracket format — readable, collision-resistant, and
-robust across the LLM round-trip. **Rehydration only swaps back keys present in
-the vault**, so a mangled or hallucinated token is left untouched rather than
-wrongly substituted.
+## Plugging in a different NER model
+
+`createTransformersNer` defaults to `Xenova/bert-base-NER`, which is a
+general-purpose CoNLL-2003 model. It's fine for a demo and it's what the
+validation numbers below were measured against, but it isn't tuned for PII — it
+over-tags organizations and emits a `MISC` class you probably don't want. For
+anything real you'll want to swap it.
+
+Any Hugging Face token-classification model with an ONNX export works. Point the
+adapter at it:
+
+```ts
+const ner = createTransformersNer({
+  model: 'your-org/distilbert-pii-ner-onnx', // a PII-fine-tuned encoder
+  quantized: true,
+  device: 'webgpu',
+});
+```
+
+The adapter maps common label schemes (`PER`/`PERSON`, `ORG`, `LOC`/`GPE`/
+`LOCATION`, `MISC`, with or without `B-`/`I-` prefixes) onto the engine's types.
+If your model uses a different label set, that mapping lives in one small
+function (`mapLabel` in `src/ner/transformers.ts`).
+
+If you don't want Transformers.js at all — say you already run NER on a server,
+or you want spaCy, or a hosted API — implement the interface directly. It's one
+method:
+
+```ts
+import type { NerProvider, PIIEntity } from '@pii-redaction/core';
+
+const myNer: NerProvider = {
+  async detect(text): Promise<PIIEntity[]> {
+    // call whatever you like, return spans with char offsets:
+    return [
+      { type: 'PERSON', start: 0, end: 9, text: text.slice(0, 9),
+        source: 'ner', confidence: 0.98 },
+    ];
+  },
+};
+
+await redact(text, { ner: myNer });
+```
+
+Because the core only knows about the interface, the model is genuinely
+swappable — including for a fake in unit tests, which is how the engine is tested
+without ever downloading weights.
+
+## Healthcare: PHI and FHIR
+
+The deterministic detectors cover most of the HIPAA Safe Harbor identifiers that
+have a structure — NPI, DEA, MBI, VIN, fax, URL, health-plan/beneficiary IDs,
+and clinical dates — on top of the SSN, MRN, email, phone, and address pieces
+that were already there. Names, which are Safe Harbor identifier #1, come from
+the NER layer.
+
+Clinical data usually doesn't arrive as free text, though. It arrives as FHIR,
+HL7 v2, or C-CDA, where the PHI sits in known fields. `redactFhir()` handles the
+FHIR case directly:
+
+```ts
+import { redactFhir, rehydrate } from '@pii-redaction/core';
+
+const { redactedText, vault } = await redactFhir(patientResource, { ner });
+// send redactedText to the LLM, then rehydrate(reply, vault) as usual
+```
+
+Rather than matching field paths per resource type, it recognizes FHIR's shared
+datatypes — `HumanName`, `ContactPoint`, `Address`, `Identifier`, `Narrative` —
+by shape, so it redacts a `Patient`, a `Practitioner`, or a whole `Bundle` the
+same way. Structured fields become placeholders (an `Identifier` typed by its
+`type` coding, or by the value itself if it's a recognizable ID like an SSN or
+NPI), and free-text narrative blocks get the full detector sweep. State and
+country are left in the clear, since Safe Harbor allows geography down to the
+state level. It reuses the same vault and placeholders as `redact()`, so
+`rehydrate()` reconstructs the original resource exactly.
+
+HL7 v2 and C-CDA are the obvious next formats and slot into the same
+`src/formats/` seam.
 
 ## Policy
 
 ```ts
 interface Policy {
-  allow?: PIIType[];        // only redact these types
-  deny?: PIIType[];         // never redact these types
-  minConfidence?: number;   // NER threshold (deterministic hits are always 1.0)
+  allow?: PIIType[];        // if set, redact only these types
+  deny?: PIIType[];         // never redact these, even when detected
+  minConfidence?: number;   // NER threshold; deterministic hits are always 1.0
   dictionary?: DictionaryTerm[];
 }
 ```
 
-## Eval harness
+The bias throughout is toward recall. Over-redaction is an annoyance you can undo
+with the vault; under-redaction is a leak you can't take back. So when the engine
+is unsure, it redacts.
 
-Phase 0's make-or-break asset: measure **per-entity-type precision/recall**
-before building product. The numbers double as the compliance sales artifact.
+## Validation
+
+There's a real eval harness, because "it has good regexes" isn't a claim you get
+to make without numbers. It reports per-type precision, recall, and F1.
 
 ```bash
-npm run eval                       # built-in synthetic fixtures
-npm run eval -- path/to/dataset.json
+npm run eval                                            # built-in fixtures
+node eval/datasets/fetch-ai4privacy.mjs --n=5000        # pull real public data
+npm run eval -- eval/data/ai4privacy-structured.json    # deterministic layer
+npm run eval -- eval/data/ai4privacy-all.json --ner     # add names/orgs/locations
 ```
 
-A JSON dataset is an array of `{ text, gold: [{ type, value }] }`. Point it at
-the [ai4privacy](https://huggingface.co/datasets/ai4privacy) PII-masking sets or
-your own vertical data to measure name/org/location recall.
+Measured on 5,000 examples from the public
+[ai4privacy](https://huggingface.co/datasets/ai4privacy/pii-masking-200k) set:
+on values that are actually valid instances, recall is 100% on credit cards,
+100% on VINs, 98.1% on SSNs, and 99.6% on IBANs, at 99.6%+ precision; email, IP,
+and URL land near 100% on both. Where the headline recall looks low, it's because
+the corpus generates most of its "cards" and "VINs" without valid checksums — the
+engine is correctly refusing to call an invalid number a credit card. Running the
+eval is also what caught two real bugs (an IPv6 at the end of a sentence, and
+ZIP+4 codes matching as SSNs), both now fixed. The full write-up, including the
+NER numbers and the methodology, is in [`eval/RESULTS.md`](eval/RESULTS.md).
 
 ## Repository layout
 
-This repo is the engine core plus the surfaces built on top of it:
+The repo is the engine plus a few things built on top of it.
 
 | Path | What it is |
 |---|---|
-| `src/` | the framework-agnostic engine (this package) |
-| `demo/` | single-page, client-side round-trip playground (`demo/README.md`) |
-| `extension/` | Manifest V3 browser extension — redact-on-send for ChatGPT/Claude (`extension/README.md`) |
-| `gateway/` | redacted-only edge gateway with an audit trail (`gateway/README.md`) |
-| `eval/` | precision/recall harness (Phase 0 asset) |
+| `src/` | the engine (this package) |
+| `src/deterministic/` | regex detectors and their checksum validators |
+| `src/ner/` | the Transformers.js NER adapter and chunking |
+| `src/formats/` | structure-aware redaction (FHIR today) |
+| `eval/` | the precision/recall harness and dataset tooling |
+| `demo/` | a single-page, client-side round-trip playground (`demo/README.md`) |
+| `extension/` | a Manifest V3 browser extension for ChatGPT/Claude (`extension/README.md`) |
+| `gateway/` | a redacted-only proxy with an audit trail (`gateway/README.md`) |
 | `e2e/` | headless-Chromium checks for the demo and extension |
 
 ## Scripts
@@ -168,25 +293,34 @@ This repo is the engine core plus the surfaces built on top of it:
 | `npm test` | run the vitest suite |
 | `npm run typecheck` | strict TypeScript check |
 | `npm run build` | emit `dist/` (ESM + `.d.ts`) |
-| `npm run build:browser` | bundle the engine for the demo + extension |
-| `npm run test:e2e` | build bundles and run the demo + extension e2e checks |
+| `npm run build:browser` | bundle the engine for the demo and extension |
+| `npm run test:e2e` | build bundles and run the demo + extension checks |
 | `npm run eval` | per-type precision/recall report (`-- --ner` to score names) |
 
-## Security note
+## One rule about the vault
 
-The **vault must never be serialized to the network.** It is a `Map` held in
-memory by design. Send only `redactedText`; rehydrate only locally.
+The vault must never be serialized to the network. It's a `Map` held in memory
+on purpose. Send only `redactedText`; rehydrate only on the client. If a vault
+ends up in a log, a request body, or local storage that syncs, the whole design
+is defeated.
 
-## Roadmap
+## Contributing
 
-- **Phase 0 — validate** ✅ engine core + eval harness (per-type precision/recall).
-- **Phase 1 — MVP wedge** ✅ browser extension (redact-on-send + review panel +
-  rehydration) and a client-side demo playground.
-- **Phase 2 — monetize** 🟡 redacted-only gateway with a clean audit trail is in
-  place; auth/policy/billing/team dashboards are next.
-- **Phase 3 — enterprise & platform** ⏳ published SDK, in-extension NER via an
-  offscreen document, SSO/SCIM, SOC 2, fine-tuned per-vertical models.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+how to get set up and what the bar is (tests pass, types check, new detectors
+come with fixtures). Please read the [Code of Conduct](CODE_OF_CONDUCT.md), and
+if you think you've found a security issue, follow [SECURITY.md](SECURITY.md)
+rather than opening a public issue.
+
+## Status and roadmap
+
+- **Engine** — deterministic detectors, NER layer, reconciliation, and the
+  FHIR format layer are in place and tested; validated on real ai4privacy data.
+- **Surfaces** — the browser extension, demo playground, and redacted-only
+  gateway all work end-to-end.
+- **Next** — HL7 v2 and C-CDA support on the `src/formats/` seam, a PII-tuned
+  NER model to replace the generic default, and in-extension NER.
 
 ## License
 
-MIT
+[MIT](LICENSE)

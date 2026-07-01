@@ -10,7 +10,12 @@ import type { PIIType } from '../src/types.js';
  */
 export interface EvalExample {
   text: string;
-  gold: Array<{ type: PIIType; value: string }>;
+  /**
+   * Gold entities. `value` alone lets the harness locate the span by first
+   * occurrence; when `start`/`end` are supplied (e.g. from a dataset that ships
+   * offsets) they are used verbatim, which is exact even for repeated values.
+   */
+  gold: Array<{ type: PIIType; value: string; start?: number; end?: number }>;
 }
 
 export const FIXTURES: EvalExample[] = [
@@ -81,5 +86,34 @@ export const FIXTURES: EvalExample[] = [
     text: 'The hex color #cafe12 and the word decade are not identifiers.',
     // Guards against IPv6/hex false positives on ordinary hex-looking text.
     gold: [],
+  },
+  // ---- PHI (HIPAA) fixtures ----
+  {
+    text: 'Referring provider NPI 1234567893 prescribed under DEA AZ1234563.',
+    gold: [
+      { type: 'NPI', value: '1234567893' },
+      { type: 'DEA', value: 'AZ1234563' },
+    ],
+  },
+  {
+    text: 'Medicare MBI 1EG4-TE5-MK73; discharged 03/22/2024 in stable condition.',
+    gold: [
+      { type: 'MBI', value: '1EG4-TE5-MK73' },
+      { type: 'CLINICAL_DATE', value: '03/22/2024' },
+    ],
+  },
+  {
+    text: 'Member ID HP99881234 on file; records at https://portal.clinic.org/patient/42.',
+    gold: [
+      { type: 'HEALTH_PLAN_ID', value: 'HP99881234' },
+      { type: 'URL', value: 'https://portal.clinic.org/patient/42' },
+    ],
+  },
+  {
+    text: 'Transport unit VIN 1HGCM82633A004352; fax records to fax: 415-555-0199.',
+    gold: [
+      { type: 'VIN', value: '1HGCM82633A004352' },
+      { type: 'FAX', value: '415-555-0199' },
+    ],
   },
 ];

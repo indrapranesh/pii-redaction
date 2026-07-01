@@ -2,12 +2,16 @@ import type { PIIEntity, PIIType } from '../types.js';
 import {
   isLuhnValid,
   isPlausibleEmailDomain,
+  isValidDEA,
   isValidIBAN,
   isValidIPv4,
   isValidIPv6,
   isValidITIN,
+  isValidMBI,
+  isValidNPI,
   isValidRoutingNumber,
   isValidSSN,
+  isValidVIN,
 } from './validators.js';
 
 /**
@@ -39,16 +43,18 @@ export const RECOGNIZERS: Recognizer[] = [
     priority: 90,
   },
   {
-    // SSN — hyphenated, spaced, or 9 bare digits.
+    // SSN — hyphenated, spaced, or 9 bare digits. The separator is captured and
+    // back-referenced so both are the same, which keeps ZIP+4 codes
+    // (`12345-6789`, one hyphen after 5 digits) from matching.
     type: 'SSN',
-    pattern: /\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g,
+    pattern: /\b\d{3}([-\s]?)\d{2}\1\d{4}\b/g,
     validate: isValidSSN,
     priority: 80,
   },
   {
     // ITIN — SSN-shaped but starts with 9; guarded by IRS group ranges.
     type: 'ITIN',
-    pattern: /\b9\d{2}[-\s]?\d{2}[-\s]?\d{4}\b/g,
+    pattern: /\b9\d{2}([-\s]?)\d{2}\1\d{4}\b/g,
     validate: isValidITIN,
     priority: 82,
   },
@@ -76,9 +82,12 @@ export const RECOGNIZERS: Recognizer[] = [
   {
     // IPv6 — any colon-bearing token, validated (handles `::` compression and
     // an optional embedded IPv4 tail). Candidate must contain at least 2 colons.
+    // The body may contain dots (for an embedded IPv4 tail) but must not *end*
+    // on one, so a sentence-ending period isn't swallowed into the candidate
+    // (which would then fail validation). A trailing `.` is allowed to follow.
     type: 'IP',
     pattern:
-      /(?<![0-9a-fA-F:.])(?=[0-9a-fA-F.]*:[0-9a-fA-F.]*:)[0-9a-fA-F:.]{2,45}(?![0-9a-fA-F:.])/g,
+      /(?<![0-9a-fA-F:.])(?=[0-9a-fA-F.]*:[0-9a-fA-F.]*:)[0-9a-fA-F:.]{1,44}[0-9a-fA-F:](?![0-9a-fA-F:])/g,
     validate: isValidIPv6,
     priority: 60,
   },
@@ -134,6 +143,75 @@ export const RECOGNIZERS: Recognizer[] = [
     pattern:
       /(?<=\b(?:dob|d\.o\.b\.|date of birth|born(?: on)?)\b[:\s]{0,3})\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/gi,
     priority: 55,
+  },
+
+  // ---- PHI (HIPAA) detectors ----
+  {
+    // URL — Safe Harbor #14. Trailing sentence punctuation is excluded.
+    type: 'URL',
+    pattern: /\bhttps?:\/\/[^\s<>"')\]]+[^\s<>"')\].,;:!?]/gi,
+    priority: 88,
+  },
+  {
+    // NPI — US National Provider Identifier, 10 digits with an 80840-prefixed
+    // Luhn check. The checksum makes a bare 10-digit run safe to match.
+    type: 'NPI',
+    pattern: /\b\d{10}\b/g,
+    validate: isValidNPI,
+    priority: 66,
+  },
+  {
+    // DEA number — 2 letters + 7 digits, guarded by the DEA checksum.
+    type: 'DEA',
+    pattern: /\b[A-Za-z]{2}\d{7}\b/g,
+    validate: isValidDEA,
+    priority: 68,
+  },
+  {
+    // MBI — Medicare Beneficiary Identifier in canonical hyphenated form,
+    // validated by its strict positional rules.
+    type: 'MBI',
+    pattern: /\b[0-9A-Za-z]{4}-[0-9A-Za-z]{3}-[0-9A-Za-z]{4}\b/g,
+    validate: isValidMBI,
+    priority: 67,
+  },
+  {
+    // MBI — bare (un-hyphenated) form, keyword-gated to control false positives
+    // since there is no checksum on the 11 characters.
+    type: 'MBI',
+    pattern:
+      /(?<=\b(?:mbi|medicare(?:\s*(?:id|no|number|#))?)\b[:.#\s]{0,3})[0-9A-Za-z]{11}\b/gi,
+    validate: isValidMBI,
+    priority: 67,
+  },
+  {
+    // VIN — Safe Harbor #12 (vehicle id), guarded by the ISO-3779 check digit.
+    type: 'VIN',
+    pattern: /\b[A-HJ-NPR-Za-hj-npr-z0-9]{17}\b/g,
+    validate: isValidVIN,
+    priority: 64,
+  },
+  {
+    // Fax number — Safe Harbor #5. Keyword-gated NANP/international number.
+    type: 'FAX',
+    pattern:
+      /(?<=\bfax(?:\s*(?:no|number|#))?\b[:.#\s]{0,3})(?:\+\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/gi,
+    priority: 52,
+  },
+  {
+    // Health-plan / insurance beneficiary number — Safe Harbor #9. Keyword-gated.
+    type: 'HEALTH_PLAN_ID',
+    pattern:
+      /(?<=\b(?:member|policy|subscriber|group|beneficiary|insurance|health\s*plan)(?:\s*(?:id|no|number|#))?\b[:.#\s]{0,3})[A-Z0-9][A-Z0-9-]{4,19}\b/gi,
+    priority: 32,
+  },
+  {
+    // Clinical date — Safe Harbor #3 (dates tied to an individual other than
+    // year). Keyword-gated: admission/discharge/death/service/visit/procedure.
+    type: 'CLINICAL_DATE',
+    pattern:
+      /(?<=\b(?:admitted|admission|discharged?|deceased|expired|date of (?:service|admission|discharge|death)|procedure date|visit date)\b[:\s]{0,3})\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/gi,
+    priority: 54,
   },
 ];
 

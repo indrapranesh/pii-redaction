@@ -33,8 +33,14 @@ export {
   isValidIBAN,
   isValidRoutingNumber,
   isPlausibleEmailDomain,
+  isValidNPI,
+  isValidDEA,
+  isValidMBI,
+  isValidVIN,
 } from './deterministic/index.js';
 export type { Recognizer } from './deterministic/index.js';
+export { redactFhir } from './formats/index.js';
+export type { FhirRedactOptions, FhirRedactionResult } from './formats/index.js';
 export { chunkText } from './ner/chunk.js';
 export {
   TransformersNerProvider,

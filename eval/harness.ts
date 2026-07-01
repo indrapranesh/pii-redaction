@@ -33,6 +33,11 @@ interface Counts {
 
 function locateGold(example: EvalExample): GoldSpan[] {
   return example.gold.map((g) => {
+    // Prefer explicit offsets (exact, handles repeated values); else locate by
+    // first occurrence.
+    if (typeof g.start === 'number' && typeof g.end === 'number') {
+      return { type: g.type, start: g.start, end: g.end };
+    }
     const start = example.text.indexOf(g.value);
     if (start < 0) {
       throw new Error(
@@ -129,11 +134,14 @@ async function main(): Promise<void> {
   // Optional `--ner` or `--ner=<model-id>` to also score PERSON/ORG/LOCATION
   // with a real Transformers.js model (downloads weights on first run).
   const nerArg = args.find((a) => a === '--ner' || a.startsWith('--ner='));
+  const limitArg = args.find((a) => a.startsWith('--limit='));
+  const limit = limitArg ? Number(limitArg.split('=')[1]) : Infinity;
   const datasetPath = args.find((a) => !a.startsWith('--'));
 
-  const examples: EvalExample[] = datasetPath
+  let examples: EvalExample[] = datasetPath
     ? (JSON.parse(readFileSync(datasetPath, 'utf8')) as EvalExample[])
     : FIXTURES;
+  if (Number.isFinite(limit)) examples = examples.slice(0, limit);
 
   let ner: NerProvider | undefined;
   if (nerArg) {

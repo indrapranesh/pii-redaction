@@ -20,17 +20,26 @@ const SOURCE_RANK: Record<EntitySource, number> = {
  */
 const TYPE_RANK: Partial<Record<PIIType, number>> = {
   EMAIL: 90,
+  URL: 88,
   ITIN: 82,
   SSN: 80,
   IBAN: 75,
   CREDIT_CARD: 70,
+  DEA: 68,
+  MBI: 67,
+  NPI: 66,
+  VIN: 64,
   IP: 60,
   PASSPORT: 58,
   DRIVERS_LICENSE: 57,
   MRN: 56,
   DATE_OF_BIRTH: 55,
+  CLINICAL_DATE: 54,
+  FAX: 52,
   PHONE: 50,
   ROUTING_NUMBER: 40,
+  IDENTIFIER: 35,
+  HEALTH_PLAN_ID: 32,
   ACCOUNT_NUMBER: 30,
 };
 

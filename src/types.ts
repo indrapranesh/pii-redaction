@@ -27,6 +27,17 @@ export type PIIType =
   | 'DRIVERS_LICENSE'
   | 'MRN'
   | 'DATE_OF_BIRTH'
+  // PHI (HIPAA Safe Harbor) structured identifiers
+  | 'NPI'
+  | 'DEA'
+  | 'MBI'
+  | 'VIN'
+  | 'FAX'
+  | 'URL'
+  | 'HEALTH_PLAN_ID'
+  | 'CLINICAL_DATE'
+  /** Generic unique identifier (e.g. a FHIR Identifier.value of unknown kind). */
+  | 'IDENTIFIER'
   | 'PERSON'
   | 'ORG'
   | 'LOCATION'

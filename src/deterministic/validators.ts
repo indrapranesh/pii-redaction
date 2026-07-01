@@ -142,6 +142,78 @@ export function isValidIBAN(value: string): boolean {
   return remainder === 1;
 }
 
+/**
+ * US National Provider Identifier (PHI). A 10-digit number whose final digit is
+ * a Luhn check computed after prefixing the constant issuer id `80840`. So the
+ * 15-char string `80840` + NPI must itself satisfy the Luhn mod-10 check.
+ */
+export function isValidNPI(value: string): boolean {
+  const digits = digitsOnly(value);
+  if (!/^\d{10}$/.test(digits)) return false;
+  return isLuhnValid('80840' + digits);
+}
+
+/**
+ * US DEA registration number (PHI — prescriber id). Two letters then seven
+ * digits; the last digit is a checksum: (d1+d3+d5) + 2*(d2+d4+d6) mod 10. The
+ * first letter is a registrant-type code; the second is the registrant's
+ * last-name initial (any letter).
+ */
+export function isValidDEA(value: string): boolean {
+  const v = value.toUpperCase();
+  const m = /^([ABFGMPRX])[A-Z](\d{7})$/.exec(v);
+  if (!m) return false;
+  const d = m[2];
+  const n = (i: number): number => d.charCodeAt(i) - 48;
+  const sum1 = n(0) + n(2) + n(4);
+  const sum2 = n(1) + n(3) + n(5);
+  return (sum1 + 2 * sum2) % 10 === n(6);
+}
+
+/** Letters CMS permits in an MBI (A-Z minus the look-alikes S, L, O, I, B, Z). */
+const MBI_ALPHA = 'ACDEFGHJKMNPQRTUVWXY';
+
+/**
+ * US Medicare Beneficiary Identifier (PHI). Eleven characters, hyphens
+ * optional, with strict per-position rules: numeric / alpha / alphanumeric in a
+ * fixed pattern, using only the non-ambiguous MBI alphabet. There is no
+ * checksum, so the positional rules carry the precision.
+ */
+export function isValidMBI(value: string): boolean {
+  const v = value.replace(/[-\s]/g, '').toUpperCase();
+  if (v.length !== 11) return false;
+  const A = `[${MBI_ALPHA}]`;
+  const AN = `[0-9${MBI_ALPHA}]`;
+  const re = new RegExp(`^[1-9]${A}${AN}[0-9]${A}${AN}[0-9]${A}${A}[0-9][0-9]$`);
+  return re.test(v);
+}
+
+/**
+ * US/ISO-3779 Vehicle Identification Number (PHI — Safe Harbor identifier #12).
+ * 17 chars excluding I/O/Q, with a mod-11 check digit at position 9 (value `X`
+ * means 10). Letters transliterate to numeric values per the standard.
+ */
+export function isValidVIN(value: string): boolean {
+  const v = value.toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(v)) return false;
+  const translit: Record<string, number> = {
+    A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8,
+    J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9,
+    S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9,
+  };
+  const weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum = 0;
+  for (let i = 0; i < 17; i++) {
+    const ch = v[i];
+    const val = /\d/.test(ch) ? ch.charCodeAt(0) - 48 : translit[ch];
+    if (val === undefined) return false;
+    sum += val * weights[i];
+  }
+  const check = sum % 11;
+  const expected = check === 10 ? 'X' : String(check);
+  return v[8] === expected;
+}
+
 /** A conservative allow-list check that an email's domain looks plausible. */
 export function isPlausibleEmailDomain(email: string): boolean {
   const at = email.lastIndexOf('@');

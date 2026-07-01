@@ -1,16 +1,32 @@
 {
   "name": "@pii-redaction/core",
-  "version": "0.1.0",
-  "description": "Framework-agnostic, client-side PII redaction engine: deterministic detectors + contextual NER, stable placeholders, in-memory vault, and rehydration for safe cloud-LLM round-trips.",
+  "version": "0.2.0",
+  "description": "Framework-agnostic, client-side PII/PHI redaction engine: deterministic detectors + contextual NER, stable placeholders, in-memory vault, and rehydration for safe cloud-LLM round-trips. FHIR-aware.",
   "type": "module",
   "license": "MIT",
+  "author": "indrapranesh <indrapranesh2111@gmail.com>",
+  "homepage": "https://github.com/indrapranesh/pii-redaction#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indrapranesh/pii-redaction.git"
+  },
+  "bugs": {
+    "url": "https://github.com/indrapranesh/pii-redaction/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "keywords": [
     "pii",
+    "phi",
     "redaction",
     "privacy",
-    "ner",
-    "gdpr",
     "hipaa",
+    "gdpr",
+    "fhir",
+    "healthcare",
+    "ner",
+    "de-identification",
     "transformers.js",
     "presidio"
   ],
@@ -28,7 +44,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

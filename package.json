@@ -1,0 +1,54 @@
+{
+  "name": "@pii-redaction/core",
+  "version": "0.1.0",
+  "description": "Framework-agnostic, client-side PII redaction engine: deterministic detectors + contextual NER, stable placeholders, in-memory vault, and rehydration for safe cloud-LLM round-trips.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pii",
+    "redaction",
+    "privacy",
+    "ner",
+    "gdpr",
+    "hipaa",
+    "transformers.js",
+    "presidio"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ner/transformers": {
+      "types": "./dist/ner/transformers.d.ts",
+      "import": "./dist/ner/transformers.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "tsx eval/harness.ts"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

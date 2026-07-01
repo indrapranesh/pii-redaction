@@ -148,6 +148,19 @@ A JSON dataset is an array of `{ text, gold: [{ type, value }] }`. Point it at
 the [ai4privacy](https://huggingface.co/datasets/ai4privacy) PII-masking sets or
 your own vertical data to measure name/org/location recall.
 
+## Repository layout
+
+This repo is the engine core plus the surfaces built on top of it:
+
+| Path | What it is |
+|---|---|
+| `src/` | the framework-agnostic engine (this package) |
+| `demo/` | single-page, client-side round-trip playground (`demo/README.md`) |
+| `extension/` | Manifest V3 browser extension — redact-on-send for ChatGPT/Claude (`extension/README.md`) |
+| `gateway/` | redacted-only edge gateway with an audit trail (`gateway/README.md`) |
+| `eval/` | precision/recall harness (Phase 0 asset) |
+| `e2e/` | headless-Chromium checks for the demo and extension |
+
 ## Scripts
 
 | Script | What it does |
@@ -155,7 +168,9 @@ your own vertical data to measure name/org/location recall.
 | `npm test` | run the vitest suite |
 | `npm run typecheck` | strict TypeScript check |
 | `npm run build` | emit `dist/` (ESM + `.d.ts`) |
-| `npm run eval` | per-type precision/recall report |
+| `npm run build:browser` | bundle the engine for the demo + extension |
+| `npm run test:e2e` | build bundles and run the demo + extension e2e checks |
+| `npm run eval` | per-type precision/recall report (`-- --ner` to score names) |
 
 ## Security note
 
@@ -164,10 +179,13 @@ memory by design. Send only `redactedText`; rehydrate only locally.
 
 ## Roadmap
 
-This package is the Phase 0 / Phase 1 core engine. Downstream surfaces build on
-it: a Manifest V3 browser extension (redact-on-send for the ChatGPT/Claude web
-UI), an SDK, and an optional redacted-only gateway that logs an audit trail
-without ever seeing raw PII.
+- **Phase 0 — validate** ✅ engine core + eval harness (per-type precision/recall).
+- **Phase 1 — MVP wedge** ✅ browser extension (redact-on-send + review panel +
+  rehydration) and a client-side demo playground.
+- **Phase 2 — monetize** 🟡 redacted-only gateway with a clean audit trail is in
+  place; auth/policy/billing/team dashboards are next.
+- **Phase 3 — enterprise & platform** ⏳ published SDK, in-extension NER via an
+  offscreen document, SSO/SCIM, SOC 2, fine-tuned per-vertical models.
 
 ## License
 

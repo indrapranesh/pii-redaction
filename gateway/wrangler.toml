@@ -1,0 +1,18 @@
+name = "pii-redaction-gateway"
+main = "src/worker.ts"
+compatibility_date = "2024-11-01"
+
+# Client keys allowed to use the gateway (comma-separated). Prefer a secret:
+#   wrangler secret put GATEWAY_API_KEYS
+# [vars]
+# GATEWAY_API_KEYS = "..."
+# UPSTREAM_BASE_URL = "https://api.openai.com"
+
+# Upstream provider key — set as a secret, never a plaintext var:
+#   wrangler secret put UPSTREAM_API_KEY
+
+# Durable, append-only audit log. Create with:
+#   wrangler kv:namespace create AUDIT_LOG
+# [[kv_namespaces]]
+# binding = "AUDIT_LOG"
+# id = "<your-kv-id>"

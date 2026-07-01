@@ -18,5 +18,5 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true
   },
-  "include": ["src", "eval", "test"]
+  "include": ["src", "eval", "test", "gateway"]
 }

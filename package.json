@@ -1,7 +1,7 @@
 {
-  "name": "@pii-redaction/core",
+  "name": "@deident/core",
   "version": "0.2.0",
-  "description": "Framework-agnostic, client-side PII/PHI redaction engine: deterministic detectors + contextual NER, stable placeholders, in-memory vault, and rehydration for safe cloud-LLM round-trips. FHIR-aware.",
+  "description": "Framework-agnostic, client-side PII/PHI de-identification engine: deterministic detectors + contextual NER, stable placeholders, in-memory vault, and rehydration for safe cloud-LLM round-trips. FHIR / HL7 v2 / C-CDA aware.",
   "type": "module",
   "license": "MIT",
   "author": "indrapranesh <indrapranesh2111@gmail.com>",

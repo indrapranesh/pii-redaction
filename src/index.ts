@@ -1,7 +1,7 @@
 /**
- * @pii-redaction/core
+ * @deident/core
  *
- * Framework-agnostic, client-side PII redaction engine.
+ * Framework-agnostic, client-side PII/PHI de-identification engine.
  *
  *   const { redactedText, vault } = await redact(text, { policy, ner });
  *   // ...send redactedText to a cloud LLM, get a response back...

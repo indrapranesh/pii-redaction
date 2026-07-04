@@ -1,4 +1,4 @@
-# @pii-redaction/core
+# @deident/core
 
 A PII and PHI redaction engine that runs where your text is, not on someone
 else's server. You hand it a string, it finds the sensitive spans, replaces them
@@ -54,7 +54,7 @@ the substitution and the user never sees the placeholders at all.
 ## Install
 
 ```bash
-npm install @pii-redaction/core
+npm install @deident/core
 
 # only if you want the contextual NER layer:
 npm install @huggingface/transformers
@@ -65,7 +65,7 @@ npm install @huggingface/transformers
 Deterministic only — no dependencies, runs in microseconds:
 
 ```ts
-import { redact, rehydrate } from '@pii-redaction/core';
+import { redact, rehydrate } from '@deident/core';
 
 const { redactedText, vault } = await redact(
   'Email jane@example.com about card 4111 1111 1111 1111.',
@@ -79,8 +79,8 @@ const answer = rehydrate(response, vault); // real values restored, locally
 With the NER layer for names, organizations, and locations:
 
 ```ts
-import { redact } from '@pii-redaction/core';
-import { createTransformersNer } from '@pii-redaction/core/ner/transformers';
+import { redact } from '@deident/core';
+import { createTransformersNer } from '@deident/core/ner/transformers';
 
 const ner = createTransformersNer({
   model: 'Xenova/bert-base-NER', // a fine-tuned model does much better — see below
@@ -181,7 +181,7 @@ or you want spaCy, or a hosted API — implement the interface directly. It's on
 method:
 
 ```ts
-import type { NerProvider, PIIEntity } from '@pii-redaction/core';
+import type { NerProvider, PIIEntity } from '@deident/core';
 
 const myNer: NerProvider = {
   async detect(text): Promise<PIIEntity[]> {
@@ -214,7 +214,7 @@ and they all reuse the same vault and placeholders as `redact()`, so
 `rehydrate()` reconstructs the original document exactly.
 
 ```ts
-import { redactFhir, redactHl7, redactCcda, rehydrate } from '@pii-redaction/core';
+import { redactFhir, redactHl7, redactCcda, rehydrate } from '@deident/core';
 
 const { redactedText, vault } = await redactFhir(patientResource, { ner });
 // same shape for redactHl7(message, { ner }) and redactCcda(xml, { ner })

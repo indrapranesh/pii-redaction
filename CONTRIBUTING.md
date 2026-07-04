@@ -55,6 +55,21 @@ detector missing or over-firing, the exact string helps most.
 If you think you've found a security problem, please don't open a public issue;
 see [SECURITY.md](SECURITY.md).
 
+## Releasing
+
+Releases are automated. Bump the version, push the tag, and CI publishes to npm:
+
+```bash
+npm version patch    # or minor / major — updates package.json and tags it
+git push --follow-tags
+```
+
+The `Publish to npm` workflow (`.github/workflows/publish.yml`) fires on the
+`v*` tag, checks the tag matches `package.json`, runs typecheck + tests + build
+(via `prepublishOnly`), and publishes with provenance. It needs an `NPM_TOKEN`
+repo secret — an npm automation or granular token with "bypass 2FA", since
+publishing has two-factor enabled. Remember to add a `CHANGELOG.md` entry.
+
 ## Commit and PR notes
 
 - Keep pull requests focused on one thing.

@@ -36,8 +36,20 @@ jobs:
             exit 1
           fi
 
+      - name: Skip if this version is already on npm
+        id: exists
+        run: |
+          VER="$(node -p "require('./package.json').version")"
+          if npm view "@deident/core@$VER" version >/dev/null 2>&1; then
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+            echo "@deident/core@$VER is already on npm — skipping publish."
+          else
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # prepublishOnly runs typecheck + tests + build before the actual publish.
       - name: Publish
+        if: steps.exists.outputs.already-published == 'false'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

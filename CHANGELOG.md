@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **HL7 v2 support** via `redactHl7()` — reads the delimiters from MSH, redacts
+  the known PHI fields in `PID`/`NK1`/`GT1`/`IN1`/`IN2`, sweeps `NTE`/`OBX`, and
+  reassembles with the original separators.
+- **C-CDA support** via `redactCcda()` — redacts person-name elements, scopes
+  address/telecom/id/birth-time to `recordTarget`, and sweeps section `<text>`
+  narratives.
+
+### Changed
+
+- Extracted the shared allocator and free-text sweep into `src/formats/shared.ts`
+  so FHIR, HL7, and C-CDA share one vault implementation.
+
 ## [0.2.0]
 
 ### Added

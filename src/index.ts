@@ -39,8 +39,14 @@ export {
   isValidVIN,
 } from './deterministic/index.js';
 export type { Recognizer } from './deterministic/index.js';
-export { redactFhir } from './formats/index.js';
-export type { FhirRedactOptions, FhirRedactionResult } from './formats/index.js';
+export { redactFhir, redactHl7, redactCcda } from './formats/index.js';
+export type {
+  FhirRedactOptions,
+  FhirRedactionResult,
+  Hl7RedactionResult,
+  CcdaRedactionResult,
+  FormatRedactOptions,
+} from './formats/index.js';
 export { chunkText } from './ner/chunk.js';
 export {
   TransformersNerProvider,

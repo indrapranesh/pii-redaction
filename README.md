@@ -209,28 +209,39 @@ that were already there. Names, which are Safe Harbor identifier #1, come from
 the NER layer.
 
 Clinical data usually doesn't arrive as free text, though. It arrives as FHIR,
-HL7 v2, or C-CDA, where the PHI sits in known fields. `redactFhir()` handles the
-FHIR case directly:
+HL7 v2, or C-CDA, where the PHI sits in known fields. There's a redactor for each,
+and they all reuse the same vault and placeholders as `redact()`, so
+`rehydrate()` reconstructs the original document exactly.
 
 ```ts
-import { redactFhir, rehydrate } from '@pii-redaction/core';
+import { redactFhir, redactHl7, redactCcda, rehydrate } from '@pii-redaction/core';
 
 const { redactedText, vault } = await redactFhir(patientResource, { ner });
+// same shape for redactHl7(message, { ner }) and redactCcda(xml, { ner })
 // send redactedText to the LLM, then rehydrate(reply, vault) as usual
 ```
 
-Rather than matching field paths per resource type, it recognizes FHIR's shared
-datatypes — `HumanName`, `ContactPoint`, `Address`, `Identifier`, `Narrative` —
-by shape, so it redacts a `Patient`, a `Practitioner`, or a whole `Bundle` the
-same way. Structured fields become placeholders (an `Identifier` typed by its
-`type` coding, or by the value itself if it's a recognizable ID like an SSN or
-NPI), and free-text narrative blocks get the full detector sweep. State and
-country are left in the clear, since Safe Harbor allows geography down to the
-state level. It reuses the same vault and placeholders as `redact()`, so
-`rehydrate()` reconstructs the original resource exactly.
+**FHIR** recognizes the shared datatypes — `HumanName`, `ContactPoint`,
+`Address`, `Identifier`, `Narrative` — by shape rather than matching field paths
+per resource, so it handles a `Patient`, a `Practitioner`, or a whole `Bundle`
+the same way. An `Identifier` is typed by its `type` coding, or by the value
+itself if it's a recognizable ID like an SSN or NPI; narrative blocks get the
+full detector sweep.
 
-HL7 v2 and C-CDA are the obvious next formats and slot into the same
-`src/formats/` seam.
+**HL7 v2** reads the delimiters from `MSH-1`/`MSH-2` rather than assuming them,
+then redacts the known PHI fields — patient name, DOB, address, phone, account,
+SSN, license, and identifiers in `PID`, plus `NK1`, `GT1`, `IN1`/`IN2` — sweeps
+`NTE` notes and `OBX` values, and reassembles with the original separators.
+
+**C-CDA** redacts person-name elements anywhere in the document, scopes address,
+telephone, id, and birth-time redaction to the `recordTarget` block (so
+facility and author addresses are left alone), and sweeps the section `<text>`
+narratives.
+
+In all three, state and country are left in the clear, since Safe Harbor allows
+geography down to the state level. The format layer lives behind one seam
+(`src/formats/`), so adding another standard means writing one walker, not
+touching the engine.
 
 ## Policy
 
@@ -279,7 +290,7 @@ The repo is the engine plus a few things built on top of it.
 | `src/` | the engine (this package) |
 | `src/deterministic/` | regex detectors and their checksum validators |
 | `src/ner/` | the Transformers.js NER adapter and chunking |
-| `src/formats/` | structure-aware redaction (FHIR today) |
+| `src/formats/` | structure-aware redaction (FHIR, HL7 v2, C-CDA) |
 | `eval/` | the precision/recall harness and dataset tooling |
 | `demo/` | a single-page, client-side round-trip playground (`demo/README.md`) |
 | `extension/` | a Manifest V3 browser extension for ChatGPT/Claude (`extension/README.md`) |
@@ -315,11 +326,12 @@ rather than opening a public issue.
 ## Status and roadmap
 
 - **Engine** — deterministic detectors, NER layer, reconciliation, and the
-  FHIR format layer are in place and tested; validated on real ai4privacy data.
+  format layer (FHIR, HL7 v2, C-CDA) are in place and tested; validated on real
+  ai4privacy data.
 - **Surfaces** — the browser extension, demo playground, and redacted-only
   gateway all work end-to-end.
-- **Next** — HL7 v2 and C-CDA support on the `src/formats/` seam, a PII-tuned
-  NER model to replace the generic default, and in-extension NER.
+- **Next** — a PII-tuned NER model to replace the generic default, in-extension
+  NER, and more format coverage (NCPDP, X12) as it's needed.
 
 ## License
 

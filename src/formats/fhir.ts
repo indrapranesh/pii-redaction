@@ -1,8 +1,6 @@
-import { detectDeterministic } from '../deterministic/index.js';
 import { runRecognizers } from '../deterministic/recognizers.js';
-import { makePlaceholder } from '../placeholders.js';
-import { reconcile } from '../reconcile.js';
-import type { PIIEntity, PIIType, Policy, NerProvider } from '../types.js';
+import type { PIIType } from '../types.js';
+import { createRedactor, type FormatRedactOptions } from './shared.js';
 
 /**
  * Structure-aware PHI redaction for FHIR resources (R4).
@@ -14,19 +12,15 @@ import type { PIIEntity, PIIType, Policy, NerProvider } from '../types.js';
  * Practitioner, RelatedPerson, Bundles, and any other resource uniformly, and
  * degrades gracefully on shapes it doesn't know (they're just recursed into).
  *
- * The redactor allocates the same `[[TYPE_N]]` placeholders as the free-text
- * engine into a shared vault, so a value that appears both in a structured field
- * and in narrative text maps to one stable placeholder — and `rehydrate()` from
- * the core works unchanged on the serialized output.
+ * Redactions go through the shared allocator (see ./shared.ts), so the tokens
+ * and vault match the core `redact()` and `rehydrate()` works unchanged on the
+ * serialized output.
  */
 
 /** Any JSON value. FHIR resources are plain JSON. */
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
-export interface FhirRedactOptions {
-  policy?: Policy;
-  /** Optional contextual NER, applied to free-text narrative/notes. */
-  ner?: NerProvider;
+export interface FhirRedactOptions extends FormatRedactOptions {
   /** Indentation for the serialized output. Default 2; pass 0 for compact. */
   space?: number;
 }
@@ -74,19 +68,6 @@ function isObject(v: Json): v is { [k: string]: Json } {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-/** Apply a policy's allow/deny/confidence filter (mirrors the core engine). */
-function applyPolicy(entities: PIIEntity[], policy: Policy): PIIEntity[] {
-  const allow = policy.allow ? new Set(policy.allow) : null;
-  const deny = policy.deny ? new Set(policy.deny) : null;
-  const minConfidence = policy.minConfidence ?? 0;
-  return entities.filter((e) => {
-    if (allow && !allow.has(e.type)) return false;
-    if (deny && deny.has(e.type)) return false;
-    if (e.source === 'ner' && e.confidence < minConfidence) return false;
-    return true;
-  });
-}
-
 /**
  * Redact PHI in a FHIR resource. Accepts a resource object or a JSON string.
  */
@@ -94,56 +75,15 @@ export async function redactFhir(
   input: string | unknown,
   options: FhirRedactOptions = {},
 ): Promise<FhirRedactionResult> {
-  const policy = options.policy ?? {};
   const root: Json =
     typeof input === 'string' ? (JSON.parse(input) as Json) : (input as Json);
 
-  const vault = new Map<string, string>();
-  const placeholders = new Map<string, string>();
-  const redactions: FhirRedactionResult['redactions'] = [];
-  const counters = new Map<PIIType, number>();
-
-  /** Allocate (or reuse) a stable placeholder for a (type, value) pair. */
-  const allocate = (type: PIIType, value: string): string | null => {
-    // Respect policy allow/deny for structured fields too.
-    if (policy.allow && !policy.allow.includes(type)) return null;
-    if (policy.deny && policy.deny.includes(type)) return null;
-    const existing = placeholders.get(`${type} ${value}`);
-    if (existing) return existing;
-    const next = (counters.get(type) ?? 0) + 1;
-    counters.set(type, next);
-    const token = makePlaceholder(type, next);
-    placeholders.set(`${type} ${value}`, token);
-    vault.set(token, value);
-    redactions.push({ type, value, token });
-    return token;
-  };
-
-  /** Redact a whole leaf value as a single entity of `type`. */
-  const redactValue = (value: Json, type: PIIType): Json => {
-    if (typeof value !== 'string' || value.length === 0) return value;
-    return allocate(type, value) ?? value;
-  };
-
-  /** Run the free-text engine over a string and splice placeholders in. */
-  const redactFreeText = async (text: string): Promise<string> => {
-    if (typeof text !== 'string' || text.length === 0) return text;
-    const candidates = detectDeterministic(text, policy.dictionary ?? []);
-    if (options.ner) candidates.push(...(await options.ner.detect(text)));
-    const entities = reconcile(applyPolicy(candidates, policy));
-    // Splice right-to-left so earlier offsets stay valid.
-    const ordered = [...entities].sort((a, b) => b.start - a.start);
-    let out = text;
-    for (const e of ordered) {
-      const token = allocate(e.type, e.text);
-      if (token) out = out.slice(0, e.start) + token + out.slice(e.end);
-    }
-    return out;
-  };
+  const R = createRedactor(options);
+  const redactValue = (value: Json, type: PIIType): Json =>
+    typeof value === 'string' ? R.redactValue(value, type) : value;
 
   /** Classify a FHIR Identifier's value → most specific type we can prove. */
   const identifierType = (idObj: { [k: string]: Json }, value: string): PIIType => {
-    // 1) Explicit type coding (HL7 v2-0203).
     const type = idObj['type'];
     if (isObject(type) && Array.isArray(type['coding'])) {
       for (const c of type['coding']) {
@@ -153,11 +93,10 @@ export async function redactFhir(
         }
       }
     }
-    // 2) The value itself may be a checksum-verifiable id (SSN, NPI, ...).
+    // The value itself may be a checksum-verifiable id (SSN, NPI, ...).
     const hits = runRecognizers(value);
     const whole = hits.find((h) => h.start === 0 && h.end === value.length);
     if (whole) return whole.type;
-    // 3) Fall back to a generic identifier.
     return 'IDENTIFIER';
   };
 
@@ -176,16 +115,13 @@ export async function redactFhir(
     typeof o['div'] === 'string' && 'status' in o;
 
   /** Recursively transform a node, redacting recognized PHI in place. */
-  const transform = async (node: Json, keyHint?: string): Promise<Json> => {
+  const transform = async (node: Json): Promise<Json> => {
     if (Array.isArray(node)) {
       const out: Json[] = [];
-      for (const item of node) out.push(await transform(item, keyHint));
+      for (const item of node) out.push(await transform(item));
       return out;
     }
-    if (!isObject(node)) {
-      // A bare string reached under a PHI key hint (given[], line[], ...).
-      return node;
-    }
+    if (!isObject(node)) return node;
 
     // HumanName — redact all name-part strings as PERSON.
     if (looksLikeHumanName(node)) {
@@ -236,7 +172,7 @@ export async function redactFhir(
     // Narrative — free-text sweep over the XHTML `div`.
     if (looksLikeNarrative(node)) {
       const out = { ...node };
-      out['div'] = await redactFreeText(node['div'] as string);
+      out['div'] = await R.redactFreeText(node['div'] as string);
       return out;
     }
 
@@ -247,18 +183,12 @@ export async function redactFhir(
         out[k] = redactValue(v, 'DATE_OF_BIRTH');
       } else if (k === 'deceasedDateTime' && typeof v === 'string') {
         out[k] = redactValue(v, 'CLINICAL_DATE');
-      } else if (
-        (k === 'text' || k === 'authorString') &&
-        typeof v === 'string'
-      ) {
-        // Annotation.text / .authorString free-text (only reached outside the
-        // datatypes handled above, e.g. inside a `note`).
-        out[k] =
-          k === 'authorString'
-            ? redactValue(v, 'PERSON')
-            : await redactFreeText(v);
+      } else if (k === 'text' && typeof v === 'string') {
+        out[k] = await R.redactFreeText(v);
+      } else if (k === 'authorString' && typeof v === 'string') {
+        out[k] = redactValue(v, 'PERSON');
       } else {
-        out[k] = await transform(v, k);
+        out[k] = await transform(v);
       }
     }
     return out;
@@ -267,5 +197,11 @@ export async function redactFhir(
   const redacted = await transform(root);
   const redactedText = JSON.stringify(redacted, null, options.space ?? 2);
 
-  return { redactedText, redacted, vault, placeholders, redactions };
+  return {
+    redactedText,
+    redacted,
+    vault: R.vault,
+    placeholders: R.placeholders,
+    redactions: R.redactions,
+  };
 }
